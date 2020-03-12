@@ -494,27 +494,15 @@ export class Backend {
     const path = selectEntryPath(collection, slug) as string;
     const label = selectFileEntryLabel(collection, slug);
 
-    const integration = selectIntegration(state.integrations, null, 'assetStore');
-
     const loadedEntry = await this.implementation.getEntry(path);
-    const entry = createEntry(collection.get('name'), slug, loadedEntry.file.path, {
+    let entry = createEntry(collection.get('name'), slug, loadedEntry.file.path, {
       raw: loadedEntry.data,
       label,
       mediaFiles: [],
     });
 
-    const entryWithFormat = this.entryWithFormat(collection)(entry);
-    const mediaFolders = selectMediaFolders(state, collection, fromJS(entryWithFormat));
-    if (mediaFolders.length > 0 && !integration) {
-      entry.mediaFiles = [];
-      for (const folder of mediaFolders) {
-        entry.mediaFiles = [...entry.mediaFiles, ...(await this.implementation.getMedia(folder))];
-      }
-    } else {
-      entry.mediaFiles = state.mediaLibrary.get('files') || [];
-    }
-
-    return entryWithFormat;
+    entry = await this.processEntry(state, collection, entry);
+    return entry;
   }
 
   getMedia() {
@@ -536,9 +524,9 @@ export class Backend {
     return Promise.reject(err);
   }
 
-  entryWithFormat(collectionOrEntity: unknown) {
+  entryWithFormat(collection: Collection) {
     return (entry: EntryValue): EntryValue => {
-      const format = resolveFormat(collectionOrEntity, entry);
+      const format = resolveFormat(collection, entry);
       if (entry && entry.raw !== undefined) {
         const data = (format && attempt(format.fromFile.bind(format, entry.raw))) || {};
         if (isError(data)) console.error(data);
@@ -579,18 +567,36 @@ export class Backend {
       }));
   }
 
-  unpublishedEntry(collection: Collection, slug: string) {
-    return this.implementation!.unpublishedEntry!(collection.get('name') as string, slug)
-      .then(loadedEntry => {
-        const entry = createEntry(collection.get('name'), loadedEntry.slug, loadedEntry.file.path, {
-          raw: loadedEntry.data,
-          isModification: loadedEntry.isModification,
-          metaData: loadedEntry.metaData,
-          mediaFiles: loadedEntry.mediaFiles,
-        });
-        return entry;
-      })
-      .then(this.entryWithFormat(collection));
+  async processEntry(state: State, collection: Collection, entry: EntryValue) {
+    entry = this.entryWithFormat(collection)(entry);
+    const integration = selectIntegration(state.integrations, null, 'assetStore');
+    const mediaFolders = selectMediaFolders(state, collection, fromJS(entry));
+    if (mediaFolders.length > 0 && !integration) {
+      for (const folder of mediaFolders) {
+        entry.mediaFiles = [...entry.mediaFiles, ...(await this.implementation.getMedia(folder))];
+      }
+    } else {
+      entry.mediaFiles = [...entry.mediaFiles, ...(state.mediaLibrary.get('files') || [])];
+    }
+
+    return entry;
+  }
+
+  async unpublishedEntry(state: State, collection: Collection, slug: string) {
+    const loadedEntry = await this.implementation!.unpublishedEntry!(
+      collection.get('name') as string,
+      slug,
+    );
+
+    let entry = createEntry(collection.get('name'), loadedEntry.slug, loadedEntry.file.path, {
+      raw: loadedEntry.data,
+      isModification: loadedEntry.isModification,
+      metaData: loadedEntry.metaData,
+      mediaFiles: loadedEntry.mediaFiles?.map(file => ({ ...file, draft: true })) || [],
+    });
+
+    entry = await this.processEntry(state, collection, entry);
+    return entry;
   }
 
   /**

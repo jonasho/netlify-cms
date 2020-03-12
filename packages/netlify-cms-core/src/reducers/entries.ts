@@ -362,7 +362,12 @@ export const selectMediaFolder = (
         mediaFolder = join(entryDir, folder as string);
       }
     } else {
-      mediaFolder = join(collection!.get('folder') as string, DRAFT_MEDIA_FILES);
+      const folder = evaluateFolder(name, config, collection!, entryMap, field);
+      if (folder.startsWith('/')) {
+        mediaFolder = join(folder);
+      } else {
+        mediaFolder = join(collection!.get('folder') as string, DRAFT_MEDIA_FILES);
+      }
     }
   }
 
