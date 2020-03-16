@@ -572,11 +572,12 @@ export class Backend {
     const integration = selectIntegration(state.integrations, null, 'assetStore');
     const mediaFolders = selectMediaFolders(state, collection, fromJS(entry));
     if (mediaFolders.length > 0 && !integration) {
-      for (const folder of mediaFolders) {
-        entry.mediaFiles = [...entry.mediaFiles, ...(await this.implementation.getMedia(folder))];
-      }
+      const files = await Promise.all(
+        mediaFolders.map(folder => this.implementation.getMedia(folder)),
+      );
+      entry.mediaFiles = entry.mediaFiles.concat(...files);
     } else {
-      entry.mediaFiles = [...entry.mediaFiles, ...(state.mediaLibrary.get('files') || [])];
+      entry.mediaFiles = entry.mediaFiles.concat(state.mediaLibrary.get('files') || []);
     }
 
     return entry;
