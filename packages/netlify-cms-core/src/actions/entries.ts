@@ -527,11 +527,12 @@ export function createEmptyDraft(collection: Collection, search: string) {
       await waitForMediaLibraryToLoad(dispatch, getState());
     }
 
-    let newEntry = createEntry(collection.get('name'), '', '', {
+    const newEntry = createEntry(collection.get('name'), '', '', {
       data: dataFields,
       mediaFiles: [],
     });
-    newEntry = await backend.processEntry(state, collection, newEntry);
+    const { mediaFiles } = await backend.processEntry(state, collection, newEntry);
+    newEntry.mediaFiles = mediaFiles;
     dispatch(emptyDraftCreated(newEntry));
   };
 }
